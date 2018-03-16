@@ -1,0 +1,70 @@
+- - - - - - - - - - - - - - - - - - - - - - - - - -- - - - - - - - - - - - -
+------------------------------Opis protokołu--------------------------------
+- - - - - - - - - - - - - - - - - - - - - - - - - -- - - - - - - - - - - - -
+Plik ze strukturami zawiera trzy struktury: użytkownika, grupy i wiadomości.
+Struktura wiadomości posiada pola, które w zależności od potrzeb są wykorzystywane, niekoniecznie wszystkie na raz.
+Struktura grupa posiada pola nazwa i tablicę int'ów zawierającą numery id użytkowników do niej zapisanych.
+Struktura użytkownik posiada pola nick, id, liczba wiadomości i zalogowany(informującą czy użytkownik zalogował się już).
+//---------------------------------------------------------------------------
+typedef struct uzytkownik{
+    char nick[20];
+    int id;
+    int zalogowany;
+    int liczbawiadomosci;
+} uzytkownik;
+
+typedef struct grupa {
+    char nazwa[20];
+    int nridzapisanych[20];
+} grupa;
+
+
+typedef struct wiadomosc{
+    long typ;
+    int iduzytkownika;
+    char nick[20];
+    char tresc[255];
+    char data[15];
+    int operacja;
+    int wynik;
+    char odbiorca[20];
+} wiadomosc;
+//---------------------------------------------------------------------------
+
+
+Nazwy użytkowników i grup wczytywane są z pliku konfiguracyjnego. Nick użytkownika powinien zaczynać się o litery 'u', a nazwa grupy o litery 'g'.
+
+Programy działają w pełni w architekturze klient serwer, każda operacja przechodzi przez serwer. Serwer pracuje w nieskończonej pętli, odpytując kolejkę i czekając na zapytania z niej.
+Program opiera się na kolejce komunikatów o nr 2017013. Serwer posługuje się komunikatami o typie 1, a klienci o typach równych numerom kolejności ich wczytywania z pliku konfiguracyjnego(od 1 do n). 
+
+Klient po uruchomieniu i próbie zalogowania pisze najpierw do serwera kolejką komunikatem o typie swojego numeru PID, a następnie po udanym zalogowaniu pobiera od serwera swój właściwy typ. Serwer wysyła go kolejką o typie nr PID, dopiero od tego momentu serwer oraz klient komunikują się nowym typem (nowy typ klienta, serwer zawsze odbiera komunikaty typu 1).
+Jeżeli klient zalogował się już wcześniej zamiast nowego ID klient otrzymuje wartość '-1' i informuje użytkownika o braku możliwości ponownego logowania. Jeżeli użytkownik poda niewłaściwy nick (nieistniejący w bazie) również zostanie mu odmówione zalogowanie.
+
+Wysyłanie wiadomości odbywa się poprzez przesłanie komunikatu przez klienta do serwera. W komunikacie znajduje się id odbiorcy i wiadomość. Serwer znajduje odbiorcę w tablicy użytkowników i wysyła do niego komunikat o typie wziętym również z tablicy użytkowników, jednak pomnożonym razy osiem (wiadomości użytkowników zawsze przechodzą na takim typie).
+Powyższy protokół eliminuje możliwość błędej komunikacji klientów z serwerem w przypadku równoległych zapytań, klient pytający dostaje odpowiedź na swoje pytanie a nie innego klienta.
+Wiadomość do grupy wygląda podobnie, serwer otrzymuje nazwę grupy, znajduję ją w tablicy grup i wysyła do wszystkich jej użytkowników wiadomość.
+Serwer sprawdza również czy grupa lub użytkownik istnieją i odpowiednio to komentuje.
+Serwer ze swojej strony dokłada do pola data struktury wiadomość, datę pobraną przez funkcję time z biblioteki time.h.
+
+Odbiór wiadmości odbywa się poprzez odpowiednią opcję. Polega na zapytaniu serwera o liczbę wiadmości oczekujących na klienta i pętli while pracującej póki liczba wiadmości nie wyniesie zero.
+//---------------------------------------------------------------------------
+msgrcv(id,&odbierz,sizeof(odbierz)-sizeof(long),idklienta,0);
+int liczbawiadomosci;
+liczbawiadomosci=odbierz.wynik;
+//---------------------------------------------------------------------------                    
+while(liczbawiadomosci){
+                        msgrcv(id,&odbierz,sizeof(odbierz)-sizeof(long),(idklienta+1)*8,0);
+                        printf("Nadawca: %s\n",odbierz.nick);
+                        printf("Tresc: %s\n",odbierz.tresc);
+                        printf("Data: %s\n",odbierz.data);
+                        printf("----------------------------\n");
+                        liczbawiadomosci--;}
+                        break;}
+//---------------------------------------------------------------------------
+
+Serwer wybiera każdą operację poprzez pole struktury wiadomość o nazwie operacja. Instrukcja switch case determinuje wykonanie odpowiedniej czynności zgodnej z zapytaniem.
+
+Zapisywanie użytkownika do grupy odbywa się poprzez wysłanie zapytania do serwera z id użytkownika i nazwą grupy. Serwer odpowiada klientowi komunikatem z wynikiem operacji.
+Samo zapisanie polega na przypisaniu id użytkownika do tablicy będącej polem elementu tablicy typu strukturalnego grupa. Wypisanie polega na znalezieniu id w tej tablicy i zamianie go na zero.
+
+Instrukcja wyłączenia chatu zamyka program klienta i wysyła żądanie wyłączenia serwera. Serwer po odebraniu instrukcji wyłączenia kończy swoją pracę.
